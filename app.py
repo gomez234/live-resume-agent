@@ -4,9 +4,7 @@ from dotenv import load_dotenv
 import gradio as gr
 from autogen_agentchat.messages import TextMessage
 from agents.identity_agent import create_identity_agent
-from tools.document_loader import load_documents
-
-DOCUMENT_CONTEXT = load_documents()
+from tools.retriever import retrieve_context
 
 #Load the environment variables
 load_dotenv(override=True)
@@ -15,9 +13,11 @@ load_dotenv(override=True)
 identity_agent = create_identity_agent()
 
 async def chat_async(message, history):
+    relevant_context = retrieve_context(message)
+
     full_prompt = f"""
-Context about Samuel Gomez:
-{DOCUMENT_CONTEXT}
+Relevant context about Samuel Gomez:
+{relevant_context}
 
 User question:
 {message}
@@ -27,7 +27,10 @@ User question:
         cancellation_token=None,
     )
 
-    return response.chat_message.content
+    content = response.chat_message.content
+    content = content.replace("TERMINATE", "").strip()
+
+    return content
 
 def chat(message, history):
     return asyncio.run(chat_async(message, history))
