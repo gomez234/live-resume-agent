@@ -14,4 +14,5 @@ dependencies = [
     "psycopg>=3.3.4",
     "pypdf>=6.10.2",
     "python-dotenv>=1.2.2",
+    "tiktoken>=0.12.0",
 ]
