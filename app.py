@@ -3,34 +3,81 @@ import asyncio
 from dotenv import load_dotenv
 import gradio as gr
 from autogen_agentchat.messages import TextMessage
-from agents.identity_agent import create_identity_agent
+from agents.answer_writer_agent import create_answer_writer_agent
+from agents.tone_evaluator_agent import create_tone_evaluator_agent
 from tools.retriever import retrieve_context
 
 #Load the environment variables
 load_dotenv(override=True)
 
 
-identity_agent = create_identity_agent()
+answer_writer_agent = create_answer_writer_agent()
+tone_evaluator_agent = create_tone_evaluator_agent()
 
 async def chat_async(message, history):
     relevant_context = retrieve_context(message)
 
-    full_prompt = f"""
-Relevant context about Samuel Gomez:
+    feedback = ""
+    draft_content = ""
+
+    for attempt in range(3):
+        writer_prompt = f"""
+Context from Samuel's verified documents:
 {relevant_context}
 
 User question:
 {message}
+
+Previous feedback, if any:
+{feedback}
+
+Write the best possible answer as Samuel.
+
+Important:
+- Speak in first person.
+- Be conversational, warm, professional, and natural.
+- Do not sound like a resume bot.
+- Do not use headings unless the user asks for structure.
+- Do not invent unsupported details.
 """
-    response = await identity_agent.on_messages(
-        [TextMessage(content=full_prompt, source="user")],
-        cancellation_token=None,
-    )
 
-    content = response.chat_message.content
-    content = content.replace("TERMINATE", "").strip()
+        draft_response = await answer_writer_agent.on_messages(
+            [TextMessage(content=writer_prompt, source="user")],
+            cancellation_token=None,
+        )
 
-    return content
+        draft_content = draft_response.chat_message.content.replace("TERMINATE", "").strip()
+
+        evaluator_prompt = f"""
+User question:
+{message}
+
+Verified context:
+{relevant_context}
+
+Draft answer:
+{draft_content}
+
+Evaluate the answer.
+"""
+
+        evaluation_response = await tone_evaluator_agent.on_messages(
+            [TextMessage(content=evaluator_prompt, source="user")],
+            cancellation_token=None,
+        )
+
+        evaluation = evaluation_response.chat_message.content.replace("TERMINATE", "").strip()
+
+        if evaluation.startswith("APPROVED"):
+            final_answer = evaluation.split("FINAL_ANSWER:", 1)[-1].strip()
+            return final_answer
+
+        if evaluation.startswith("REVISE"):
+            feedback = evaluation.split("FEEDBACK:", 1)[-1].strip()
+        else:
+            feedback = "Make the answer more conversational, first-person, natural, and grounded."
+
+    return draft_content
 
 def chat(message, history):
     return asyncio.run(chat_async(message, history))
