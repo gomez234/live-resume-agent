@@ -4,15 +4,26 @@ from dotenv import load_dotenv
 import gradio as gr
 from autogen_agentchat.messages import TextMessage
 from agents.identity_agent import create_identity_agent
+from tools.document_loader import load_documents
+
+DOCUMENT_CONTEXT = load_documents()
 
 #Load the environment variables
 load_dotenv(override=True)
 
+
 identity_agent = create_identity_agent()
 
 async def chat_async(message, history):
+    full_prompt = f"""
+Context about Samuel Gomez:
+{DOCUMENT_CONTEXT}
+
+User question:
+{message}
+"""
     response = await identity_agent.on_messages(
-        [TextMessage(content=message, source="user")],
+        [TextMessage(content=full_prompt, source="user")],
         cancellation_token=None,
     )
 
@@ -23,12 +34,13 @@ def chat(message, history):
 
 demo = gr.ChatInterface(
     fn=chat,
-    title="Samuel Gomez's Live Resume Agent",
-    description="Ask questions about Samuel's background, projects, experience, and skills.",
+    title="Chat with Samuel Gomez",
+    description="Ask me about my background, projects, experience, skills, or anything you would normally ask after reading my resume.",
     examples=[
-        "Tell me about Samuel's technical skills.",
-        "What kind of projects has Samuel worked on?",
-        "What makes Samuel a strong candidate?",
+        "Tell me about yourself.",
+        "What was your favorite technical project?",
+        "What did you work on at Microsoft?",
+        "What kind of roles are you interested in?",
     ],
 )
 

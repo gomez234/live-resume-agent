@@ -8,6 +8,7 @@ dependencies = [
     "autogen-agentchat>=0.7.5",
     "autogen-core>=0.7.5",
     "autogen-ext>=0.7.5",
+    "cryptography>=48.0.0",
     "gradio>=6.14.0",
     "openai>=2.34.0",
     "pgvector>=0.4.2",
