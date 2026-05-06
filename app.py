@@ -5,7 +5,7 @@ import gradio as gr
 from autogen_agentchat.messages import TextMessage
 
 from agents.answer_writer_agent import create_answer_writer_agent
-from agents.tone_evaluator_agent import create_tone_evaluator_agent
+from agents.evaluator_agent import create_tone_evaluator_agent
 from agents.router_agent import create_router_agent
 from agents.web_search_agent import create_web_search_agent
 
@@ -17,7 +17,7 @@ load_dotenv(override=True)
 router_agent = create_router_agent()
 web_search_agent = create_web_search_agent()
 answer_writer_agent = create_answer_writer_agent()
-tone_evaluator_agent = create_tone_evaluator_agent()
+evaluator_agent = create_tone_evaluator_agent()
 
 async def chat_async(message, history):
     router_response = await router_agent.on_messages(
@@ -79,7 +79,7 @@ Draft answer:
 Evaluate the answer.
 """
 
-        evaluation_response = await tone_evaluator_agent.on_messages(
+        evaluation_response = await evaluator_agent.on_messages(
             [TextMessage(content=evaluator_prompt, source="user")],
             cancellation_token=None,
         )
