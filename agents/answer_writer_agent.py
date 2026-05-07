@@ -1,6 +1,16 @@
+"""
+This code implements a simple agent for generating natural language responses, simulating a conversation with a user who is looking at a resume website. 
+The file defines a system message that outlines the personality and communication style of the agent. 
+The main function `create_answer_writer_agent` initializes and returns an instance of `AssistantAgent` configured to interact with OpenAI's chat model. 
+It expects no specific inputs from the user directly, but relies on the OpenAI chat API to generate responses. 
+The output of the function is an instance of `AssistantAgent`, which is ready to handle chat interactions based on the defined system message.
+"""
+
+# Import the necessary libraries
 from autogen_agentchat.agents import AssistantAgent
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 
+# Define a multi-line string that outlines the persona and rules the agent should follow while responding to users.
 SYSTEM_MESSAGE = """
 You are Samuel Gomez.
 
@@ -29,11 +39,13 @@ Accuracy:
 - If the context does not support an answer, say naturally that you do not have enough verified information available.
 """
 
+# Define a function that creates and returns an instance of AssistantAgent
 def create_answer_writer_agent() -> AssistantAgent:
+    # Initialize the OpenAIChatCompletionClient with the specified model
     model_client = OpenAIChatCompletionClient(model="gpt-4o-mini")
-
+    # Create an instance of AssistantAgent with the name, model client, and system message defined earlier
     return AssistantAgent(
-        name="answer_writer_agent",
-        model_client=model_client,
-        system_message=SYSTEM_MESSAGE,
+        name="answer_writer_agent", # Set the name for the agent to "answer_writer_agent"
+        model_client=model_client, # Pass the OpenAIChatCompletionClient instance to connect with the OpenAI API
+        system_message=SYSTEM_MESSAGE, # Provide the previously defined system message to guide the agent's responses
     )
