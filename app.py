@@ -6,7 +6,7 @@ As output, it produces a final response to the user's question, looking to be co
 while also handling feedback validation through evaluation of the generated answers.
 """
 
-# Impor-t the necessary libraries for the functionality of the chat application.
+# Import the necessary libraries for the functionality of the chat application.
 import asyncio
 from dotenv import load_dotenv
 import gradio as gr
@@ -17,6 +17,7 @@ from agents.answer_writer_agent import create_answer_writer_agent
 from agents.evaluator_agent import create_tone_evaluator_agent
 from agents.router_agent import create_router_agent
 from agents.web_search_agent import create_web_search_agent
+from agents.escalation_agent import create_escalation_agent
 
 # Importing a function that retrieves relevant context based on user questions.
 from tools.retriever import retrieve_context
@@ -30,6 +31,7 @@ router_agent = create_router_agent()
 web_search_agent = create_web_search_agent()
 answer_writer_agent = create_answer_writer_agent()
 evaluator_agent = create_tone_evaluator_agent()
+escalation_agent = create_escalation_agent()
 
 # Asynchronous function to handle user chat messages and generate responses based on them.
 async def chat_async(message, history):
@@ -51,6 +53,29 @@ async def chat_async(message, history):
     else:
         # If not a web search, retrieve context using a custom function that searches for necessary information.
         relevant_context = retrieve_context(message)
+
+    escalation_prompt = f"""
+        User question:
+        {message}
+
+        Available context:
+        {relevant_context}
+
+        Should this question be escalated to Samuel directly?
+    """
+
+    escalation_response = await escalation_agent.on_messages(
+        [TextMessage(content=escalation_prompt, source="user")],
+        cancellation_token=None,
+    )
+
+    escalation_decision = escalation_response.chat_message.content.replace("TERMINATE", "").strip()
+
+    if escalation_decision.startswith("ESCALATE"):
+        if "MESSAGE_TO_USER:" in escalation_decision:
+            return escalation_decision.split("MESSAGE_TO_USER:", 1)[-1].strip()
+
+        return "I don't have enough verified information to answer that confidently. This is something I should answer directly."
     # Initialize variables to accumulate feedback and draft content during response generation.
     feedback = ""
     draft_content = ""
