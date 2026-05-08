@@ -1,6 +1,16 @@
+"""
+This Python file is designed to create an escalation agent for a live resume application. 
+The purpose of the escalation agent is to determine when user questions should be escalated to Samuel Gomez. 
+The file outlines a clear set of criteria and rules for escalation based on user inquiries. 
+The expected input is a user question directed towards the system, and the outputs are either a decision to escalate or not, formatted in a specific response structure. 
+"""
+
+# Import the necessary libraries
 from autogen_agentchat.agents import AssistantAgent
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 
+# System message that defines the role and responsibilities of the escalation agent
+# It includes detailed guidelines on when to escalate user questions to Samuel Gomez.
 SYSTEM_MESSAGE = """
 You are the escalation agent for Samuel Gomez's Live Resume Agent.
 
@@ -29,11 +39,13 @@ REASON:
 MESSAGE_TO_USER:
 <natural first-person message as Samuel telling the user that I should answer directly>
 """
-
+# Function that creates and returns an escalation agent instance
 def create_escalation_agent() -> AssistantAgent:
+    # Creating an instance of OpenAIChatCompletionClient using the "gpt-4o-mini" model 
+    # This client will be responsible for generating responses based on user queries.
     model_client = OpenAIChatCompletionClient(model="gpt-4o-mini")
     return AssistantAgent(
-        name="escalation_agent",
-        model_client=model_client,
-        system_message=SYSTEM_MESSAGE,
+        name="escalation_agent", # Assign the name for this agent instance.
+        model_client=model_client, # Pass the instantiated model client to the agent.
+        system_message=SYSTEM_MESSAGE, # Provide the system message for the evaluation.
     )
