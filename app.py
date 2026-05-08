@@ -209,7 +209,7 @@ demo = gr.ChatInterface(
     examples=[
         "Tell me about yourself.",
         "What was your favorite technical project?",
-        "What did you work on at Microsoft?",
+        "How was your time at Purdue University?",
         "What kind of roles are you interested in?",
     ],
 )
