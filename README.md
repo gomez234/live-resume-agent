@@ -1,9 +1,3 @@
----
-title: live_resume
-app_file: app.py
-sdk: gradio
-sdk_version: 6.14.0
----
 # Live Resume Agent
 
 Live Resume Agent is an AI-powered interactive resume that allows users to chat with an AI version of Samuel Gomez. Instead of reading a static resume, recruiters, professors, employers, and collaborators can ask questions about Samuel’s background, projects, technical experience, internships, research, and career interests.
