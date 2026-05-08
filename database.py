@@ -27,16 +27,12 @@ load_dotenv(override=True)
 def get_connection():
     # Retrieve the DATABASE_URL from the environment variables loaded from the .env file
     database_url = os.getenv("DATABASE_URL")
-
     # Check if the DATABASE_URL was not set; if so, raise an error to inform the user of the issue.
     if not database_url:
         raise ValueError("DATABASE_URL is missing from .env")
-
     # Establish a connection to the PostgreSQL database using the retrieved database_url.
     conn = psycopg.connect(database_url)
-
     # Register the pgvector extension with the created database connection to enable handling vector types.
     register_vector(conn)
-    
     # Return the established database connection object so it can be used by the caller.
     return conn
