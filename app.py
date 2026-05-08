@@ -11,6 +11,7 @@ import asyncio
 from dotenv import load_dotenv
 import gradio as gr
 from autogen_agentchat.messages import TextMessage
+import re
 
 # Importing various agent creation functions for different roles in the chat application.
 from agents.answer_writer_agent import create_answer_writer_agent
@@ -21,6 +22,7 @@ from agents.escalation_agent import create_escalation_agent
 
 # Importing a function that retrieves relevant context based on user questions.
 from tools.retriever import retrieve_context
+from tools.escalation_tools import handle_escalation_submission
 
 # Load the environment variables from a .env file, allowing configuration without hardcoding sensitive information.
 # The override=True option allows existing variables to be overridden by values in the .env file.
@@ -33,36 +35,63 @@ answer_writer_agent = create_answer_writer_agent()
 evaluator_agent = create_tone_evaluator_agent()
 escalation_agent = create_escalation_agent()
 
-# Asynchronous function to handle user chat messages and generate responses based on them.
+def looks_like_email(text: str) -> bool:
+    return re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", text.strip()) is not None
+pending_escalation = {
+    "active": False,
+    "question": None,
+    "reason": None,
+}
+
+
 async def chat_async(message, history):
-    # Sending the user message to the router agent to obtain the response about which agent to use.
+    global pending_escalation
+
+    if pending_escalation["active"]:
+        if looks_like_email(message):
+            user_email = message.strip()
+
+            handle_escalation_submission(
+                question=pending_escalation["question"],
+                user_email=user_email,
+                reason=pending_escalation["reason"],
+            )
+
+            pending_escalation = {
+                "active": False,
+                "question": None,
+                "reason": None,
+            }
+
+            return "Perfect — thanks for sharing your email. I’ll make sure Samuel sees your question and can follow up directly."
+
+        return "That looks like something other than an email. Could you please send the best email address for Samuel to follow up?"
+
     router_response = await router_agent.on_messages(
-    [TextMessage(content=message, source="user")], # Packaging the user message into a TextMessage object.
-    cancellation_token=None, # No cancellation token is passed here, meaning the operation would not be cancellable.
+        [TextMessage(content=message, source="user")],
+        cancellation_token=None,
     )
-    # Extracting the content from the router response and cleaning it of any 'TERMINATE' signal.
+
     route = router_response.chat_message.content.replace("TERMINATE", "").strip()
-    # If the router suggests a web search, interface with the web search agent.
+
     if route == "WEB_SEARCH":
         web_response = await web_search_agent.on_messages(
-        [TextMessage(content=message, source="user")], # Send the message to the web search agent.
-        cancellation_token=None, # Again, no cancellation token is provided.
+            [TextMessage(content=message, source="user")],
+            cancellation_token=None,
         )
-        # Clean the web search response and prepare relevant context for the answer writer.
         relevant_context = web_response.chat_message.content.replace("TERMINATE", "").strip()
     else:
-        # If not a web search, retrieve context using a custom function that searches for necessary information.
         relevant_context = retrieve_context(message)
 
     escalation_prompt = f"""
-        User question:
-        {message}
+User question:
+{message}
 
-        Available context:
-        {relevant_context}
+Available context:
+{relevant_context}
 
-        Should this question be escalated to Samuel directly?
-    """
+Should this question be escalated to Samuel directly?
+"""
 
     escalation_response = await escalation_agent.on_messages(
         [TextMessage(content=escalation_prompt, source="user")],
@@ -72,75 +101,84 @@ async def chat_async(message, history):
     escalation_decision = escalation_response.chat_message.content.replace("TERMINATE", "").strip()
 
     if escalation_decision.startswith("ESCALATE"):
-        if "MESSAGE_TO_USER:" in escalation_decision:
-            return escalation_decision.split("MESSAGE_TO_USER:", 1)[-1].strip()
+        reason = ""
 
-        return "I don't have enough verified information to answer that confidently. This is something I should answer directly."
-    # Initialize variables to accumulate feedback and draft content during response generation.
+        if "REASON:" in escalation_decision and "MESSAGE_TO_USER:" in escalation_decision:
+            reason = escalation_decision.split("REASON:", 1)[-1].split("MESSAGE_TO_USER:", 1)[0].strip()
+
+        pending_escalation = {
+            "active": True,
+            "question": message,
+            "reason": reason,
+        }
+
+        if "MESSAGE_TO_USER:" in escalation_decision:
+            message_to_user = escalation_decision.split("MESSAGE_TO_USER:", 1)[-1].strip()
+        else:
+            message_to_user = "I don’t have enough verified information to answer that confidently."
+
+        return f"{message_to_user}\n\nWhat’s the best email where Samuel can follow up with you?"
+
     feedback = ""
     draft_content = ""
-     # Attempt to generate satisfactory answers up to three times.
+
     for attempt in range(3):
-        # Preparing a prompt that includes relevant context and previous feedback to guide the answer writer.
         writer_prompt = f"""
-            Context from Samuel's verified documents:
-            {relevant_context}
+Context:
+{relevant_context}
 
-            User question:
-            {message}
+User question:
+{message}
 
-            Previous feedback, if any:
-            {feedback}
+Previous feedback, if any:
+{feedback}
 
-            Write the best possible answer as Samuel.
+Write the best possible answer as Samuel.
 
-            Important:
-            - Speak in first person.
-            - Be conversational, warm, professional, and natural.
-            - Do not sound like a resume bot.
-            - Do not use headings unless the user asks for structure.
-            - Do not invent unsupported details.
-        """
-         # Sending the writer prompt to the answer writer agent to generate a draft answer.
+Important:
+- Speak in first person.
+- Be conversational, warm, professional, and natural.
+- Do not sound like a resume bot.
+- Do not use headings unless the user asks for structure.
+- Do not invent unsupported details.
+"""
+
         draft_response = await answer_writer_agent.on_messages(
-            [TextMessage(content=writer_prompt, source="user")],  # Package the writer prompt into a TextMessage object.
-            cancellation_token=None, # No cancellation token is provided.
+            [TextMessage(content=writer_prompt, source="user")],
+            cancellation_token=None,
         )
-        # Extract the content of the draft response and clean it for any 'TERMINATE' signal.
+
         draft_content = draft_response.chat_message.content.replace("TERMINATE", "").strip()
-        # Prepare an evaluation prompt that sends the user question, context, and draft answer to the evaluator agent.
+
         evaluator_prompt = f"""
-            User question:
-            {message}
+User question:
+{message}
 
-            Verified context:
-            {relevant_context}
+Context:
+{relevant_context}
 
-            Draft answer:
-            {draft_content}
+Draft answer:
+{draft_content}
 
-            Evaluate the answer.
-        """
-        # Send the evaluation prompt to the evaluator agent for feedback on the draft answer.
+Evaluate the answer.
+"""
+
         evaluation_response = await evaluator_agent.on_messages(
-            [TextMessage(content=evaluator_prompt, source="user")], # Packaging the evaluation prompt in a TextMessage.
-            cancellation_token=None, # No cancellation token is provided.
+            [TextMessage(content=evaluator_prompt, source="user")],
+            cancellation_token=None,
         )
-         # Extract and clean the evaluation result from the evaluator's response.
-        evaluation = evaluation_response.chat_message.content.replace("TERMINATE", "").strip()
-        # If the evaluation indicates the answer is approved, extract and return the final answer.
-        if evaluation.startswith("APPROVED"):
-            final_answer = evaluation.split("FINAL_ANSWER:", 1)[-1].strip()  # Get the text after 'FINAL_ANSWER:'.
-            return final_answer # Return the satisfactory answer to the user.
-        # If the evaluation requests a revision, extract the feedback for improving the answer.
-        if evaluation.startswith("REVISE"):
-            feedback = evaluation.split("FEEDBACK:", 1)[-1].strip() # Get the feedback provided by the evaluator.
-        else:
-            # Default feedback if the evaluation is not specific; instructs for a more conversational answer.
-            feedback = "Make the answer more conversational, first-person, natural, and grounded."
-    # If no satisfactory answer is produced after three attempts, return the latest draft content.
-    return draft_content # Returns the last draft content as a fallback response.
 
+        evaluation = evaluation_response.chat_message.content.replace("TERMINATE", "").strip()
+
+        if evaluation.startswith("APPROVED"):
+            return evaluation.split("FINAL_ANSWER:", 1)[-1].strip()
+
+        if evaluation.startswith("REVISE"):
+            feedback = evaluation.split("FEEDBACK:", 1)[-1].strip()
+        else:
+            feedback = "Make the answer more conversational, first-person, natural, and grounded."
+
+    return draft_content
 # Function to handle synchronous execution of the chat function by wrapping the async function.
 def chat(message, history):
     return asyncio.run(chat_async(message, history)) # Runs the async chat_async function and yields the result.
